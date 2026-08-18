@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS links (
+    id BIGSERIAL PRIMARY KEY,
+    short_code TEXT NOT NULL UNIQUE,
+    long_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+)
