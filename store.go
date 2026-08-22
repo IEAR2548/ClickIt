@@ -25,7 +25,7 @@ func (s *LinkStore) CreateLink(ctx context.Context, longURL string) (string, err
 	code := EncodeBase62(id)
 
 	_, err = s.db.Exec(ctx,
-		`INSERT INTO links (id, short_code, loung_url) VALUES ($1, $2, $3)`,
+		`INSERT INTO links (id, short_code, long_url) VALUES ($1, $2, $3)`,
 		id, code, longURL,
 	)
 	if err != nil {
@@ -38,7 +38,7 @@ func (s *LinkStore) CreateLink(ctx context.Context, longURL string) (string, err
 func (s *LinkStore) GetLongURL(ctx context.Context, code string) (string, error) {
 	var longURL string
 	err := s.db.QueryRow(ctx,
-		`SELECT longURL FROM links WHERE short_code = '$1'`, code,
+		`SELECT long_url FROM links WHERE short_code = $1`, code,
 	).Scan(&longURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNotFound
