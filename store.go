@@ -11,6 +11,13 @@ import (
 
 var ErrNotFound = errors.New("link not found")
 
+type LinkStorer interface {
+	CreateLink(ctx context.Context, longURL string) (string, error)
+	GetLongURL(ctx context.Context, code string) (string, error)
+}
+
+var _ LinkStorer = (*LinkStore)(nil)
+
 type LinkStore struct {
 	db *pgxpool.Pool
 }
