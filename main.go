@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -29,7 +30,19 @@ func main() {
 		log.Fatalf("Unable to reach database:%v", err)
 	}
 
-	store := &LinkStore{db: pool}
+	var store LinkStorer = &LinkStore{db: pool}
+
+	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
+		rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			log.Fatalf("unable to reach redis: %v", err)
+		}
+		store = &CachedLinkStore{LinkStorer: store, cache: rdb, ttl: time.Hour}
+		log.Println("redis cache enabled")
+	} else {
+		log.Println("REDIS_ADDR not set -- running without cache")
+	}
+
 	h := &Handler{store: store}
 
 	mux := http.NewServeMux()
