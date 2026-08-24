@@ -9,7 +9,7 @@ import (
 )
 
 type Handler struct {
-	store *LinkStore
+	store LinkStorer
 }
 
 type createLinkRequest struct {
