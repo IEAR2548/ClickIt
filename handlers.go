@@ -3,13 +3,17 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
+	"time"
 )
 
 type Handler struct {
-	store LinkStorer
+	store  LinkStorer
+	clicks *ClickLogger
 }
 
 type createLinkRequest struct {
@@ -67,7 +71,27 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.clicks.Log(ClickEvent{
+		ShortCode: code,
+		IPAddress: clientIP(r),
+		UserAgent: r.UserAgent(),
+		Referrer:  r.Referer(),
+		Timestamp: time.Now(),
+	})
+
 	http.Redirect(w, r, longURL, http.StatusFound)
+}
+
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		return strings.TrimSpace(strings.Split(fwd, ",")[0])
+	}
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
