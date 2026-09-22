@@ -51,6 +51,7 @@ func main() {
 	}
 
 	clicklogger := NewClickLogger(pool, 1000)
+	analyticsStore := &AnalyticsStore{db: pool}
 
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 
@@ -61,11 +62,12 @@ func main() {
 		clicklogger.Run(workerCtx)
 	}()
 
-	h := &Handler{store: store, clicks: clicklogger}
+	h := &Handler{store: store, clicks: clicklogger, analytics: analyticsStore}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /shorten", h.CreateShortLink)
 	mux.HandleFunc("GET /health", h.Health)
+	mux.HandleFunc("GET /api/stats/{code}", h.AnalyticsSummary)
 	mux.HandleFunc("GET /{code}", h.Redirect)
 
 	port := os.Getenv("PORT")

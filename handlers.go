@@ -7,13 +7,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Handler struct {
-	store  LinkStorer
-	clicks *ClickLogger
+	store     LinkStorer
+	clicks    *ClickLogger
+	analytics AnalyticsReader
 }
 
 type createLinkRequest struct {
@@ -96,6 +98,36 @@ func clientIP(r *http.Request) string {
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) AnalyticsSummary(w http.ResponseWriter, r *http.Request) {
+	code := r.PathValue("code")
+
+	if _, err := h.store.GetLongURL(r.Context(), code); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "short link not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	days := 30
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 90 {
+			days = n
+		}
+	}
+
+	summary, err := h.analytics.Summary(r.Context(), code, days)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(summary)
+
 }
 
 func isValidURL(raw string) bool {
