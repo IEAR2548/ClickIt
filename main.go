@@ -14,6 +14,21 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+func withCORS(allowedOrigin string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -37,9 +52,10 @@ func main() {
 	}
 
 	var store LinkStorer = &LinkStore{db: pool}
+	var rdb *redis.Client
 
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
-		rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+		rdb = redis.NewClient(&redis.Options{Addr: redisAddr})
 		defer rdb.Close()
 		if err := rdb.Ping(connectCtx).Err(); err != nil {
 			log.Fatalf("unable to reach redis: %v", err)
@@ -50,8 +66,14 @@ func main() {
 		log.Println("REDIS_ADDR not set -- running without cache")
 	}
 
+	jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+	if len(jwtSecret) < 32 {
+		log.Fatal("JWT_SECRET must be set and at least 32 bytes long")
+	}
+
 	clicklogger := NewClickLogger(pool, 1000)
 	analyticsStore := &AnalyticsStore{db: pool}
+	userStore := &UserStore{db: pool}
 
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 
@@ -62,10 +84,27 @@ func main() {
 		clicklogger.Run(workerCtx)
 	}()
 
-	h := &Handler{store: store, clicks: clicklogger, analytics: analyticsStore}
+	h := &Handler{
+		store:     store,
+		users:     userStore,
+		clicks:    clicklogger,
+		analytics: analyticsStore,
+		jwtSecret: jwtSecret,
+	}
+
+	withRateLimit := func(limit int, window time.Duration, h http.Handler) http.Handler {
+		if rdb == nil {
+			return h
+		}
+		return RateLimit(rdb, limit, window)(h)
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /shorten", h.CreateShortLink)
+	mux.Handle("POST /register", withRateLimit(5, time.Hour, http.HandlerFunc(h.Register)))
+	mux.Handle("POST /login", withRateLimit(10, time.Minute, http.HandlerFunc(h.Login)))
+	mux.Handle("POST /shorten", withRateLimit(20, time.Minute, RequireAuth(jwtSecret)(http.HandlerFunc(h.CreateShortLink))))
+	mux.Handle("GET /links", RequireAuth(jwtSecret)(http.HandlerFunc(h.ListMyLinks)))
+
 	mux.HandleFunc("GET /health", h.Health)
 	mux.HandleFunc("GET /api/stats/{code}", h.AnalyticsSummary)
 	mux.HandleFunc("GET /{code}", h.Redirect)
@@ -75,9 +114,14 @@ func main() {
 		port = "8080"
 	}
 
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "http://localhost:5173"
+	}
+
 	srv := &http.Server{
 		Addr:         ":" + port,
-		Handler:      mux,
+		Handler:      withCORS(frontendOrigin, mux),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
