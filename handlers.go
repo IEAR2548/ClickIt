@@ -14,8 +14,82 @@ import (
 
 type Handler struct {
 	store     LinkStorer
+	users     UserStorer
 	clicks    *ClickLogger
 	analytics AnalyticsReader
+	jwtSecret []byte
+}
+
+type registerRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type loginResponse struct {
+	Token string `json:"token"`
+}
+
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" || len(req.Password) < 8 {
+		http.Error(w, "email is required and password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
+
+	hash, err := HashPassword(req.Password)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := h.users.Create(r.Context(), req.Email, hash); err != nil {
+		if errors.Is(err, ErrEmailTaken) {
+			http.Error(w, "email already registered", http.StatusConflict)
+			return
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.users.GetByEmail(r.Context(), req.Email)
+	if err != nil {
+		http.Error(w, "invalid emial or password", http.StatusUnauthorized)
+		return
+	}
+
+	if err := CheckPassword(user.PasswordHash, req.Password); err != nil {
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	token, err := GenerateJWT(user.ID, h.jwtSecret, 24*time.Hour)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(loginResponse{Token: token})
 }
 
 type createLinkRequest struct {
@@ -39,7 +113,13 @@ func (h *Handler) CreateShortLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := h.store.CreateLink(r.Context(), req.URL)
+	userID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	code, err := h.store.CreateLink(r.Context(), req.URL, userID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -94,6 +174,23 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+func (h *Handler) ListMyLinks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	links, err := h.store.ListByOwner(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(links)
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
