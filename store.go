@@ -81,7 +81,7 @@ func (s *LinkStore) ListByOwner(ctx context.Context, ownerID int64) ([]Link, err
 	for rows.Next() {
 		var l Link
 		if err := rows.Scan(&l.ShortCode, &l.LongURL, &l.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scan lnk row: %w", err)
+			return nil, fmt.Errorf("scan link row: %w", err)
 		}
 		links = append(links, l)
 	}
