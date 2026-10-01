@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LinkItem } from "../types";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import * as api from "../api"
 import { CreateLinkForm } from "../components/CreateLinkForm";
 import { StatsPanel } from "../components/StatsPanel";
