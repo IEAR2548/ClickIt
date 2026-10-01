@@ -42,7 +42,11 @@ type AnalyticsStore struct {
 }
 
 func (a *AnalyticsStore) Summary(ctx context.Context, code string, days int) (*AnalyticsSummary, error) {
-	summary := AnalyticsSummary{ShortCode: code}
+	summary := AnalyticsSummary{
+		ShortCode:    code,
+		ClicksByDay:  []DailyClicks{},
+		TopReferrers: []ReferrerCount{},
+	}
 
 	if err := a.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM clicks WHERE short_code = $1`, code,
