@@ -3,6 +3,9 @@ package main
 const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 func EncodeBase62(id int64) string {
+	const offset int64 = 20000000
+	id += offset
+
 	if id == 0 {
 		return string(base62Alphabet[0])
 	}

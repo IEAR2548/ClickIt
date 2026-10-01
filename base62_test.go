@@ -8,11 +8,11 @@ func TestEncodeBase62(t *testing.T) {
 		id   int64
 		want string
 	}{
-		{name: "zero", id: 0, want: "0"},
-		{name: "single digit", id: 1, want: "1"},
-		{name: "first letter boundary", id: 10, want: "A"},
-		{name: "two characters", id: 125, want: "21"},
-		{name: "lowercase boundary", id: 36, want: "a"},
+		{name: "zero", id: 0, want: "1Luue"},
+		{name: "single digit", id: 1, want: "1Luuf"},
+		{name: "first letter boundary", id: 10, want: "1Luuo"},
+		{name: "two characters", id: 125, want: "1Luwf"},
+		{name: "lowercase boundary", id: 36, want: "1LuvE"},
 	}
 
 	for _, tc := range cases {
