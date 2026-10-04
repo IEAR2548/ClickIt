@@ -1,4 +1,4 @@
-import { AuthProvider } from './context/AuthContext'
+import { AuthProvider } from './context/AuthProvider';
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
