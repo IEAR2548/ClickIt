@@ -54,8 +54,18 @@ func main() {
 	var store LinkStorer = &LinkStore{db: pool}
 	var rdb *redis.Client
 
-	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
-		rdb = redis.NewClient(&redis.Options{Addr: redisAddr})
+	switch {
+	case os.Getenv("REDIS_URL") != "":
+		opts, err := redis.ParseURL(os.Getenv("REDIS_URL"))
+		if err != nil {
+			log.Fatalf("invalid REDIS_URL: %v", err)
+		}
+		rdb = redis.NewClient(opts)
+	case os.Getenv("REDIS_ADDR") != "":
+		rdb = redis.NewClient(&redis.Options{Addr: os.Getenv("REDIS_ADDR")})
+	}
+
+	if rdb != nil {
 		defer rdb.Close()
 		if err := rdb.Ping(connectCtx).Err(); err != nil {
 			log.Fatalf("unable to reach redis: %v", err)
@@ -63,7 +73,7 @@ func main() {
 		store = &CachedLinkStore{LinkStorer: store, cache: rdb, ttl: time.Hour}
 		log.Println("redis cache enabled")
 	} else {
-		log.Println("REDIS_ADDR not set -- running without cache")
+		log.Println("REDIS_URL/REDIS_ADDR not set -- running without cache")
 	}
 
 	jwtSecret := []byte(os.Getenv("JWT_SECRET"))
