@@ -1,0 +1,27 @@
+import { AuthProvider } from './context/AuthProvider';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { DashboardPage } from "./pages/DashboardPage";
+
+export function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path='/login' element={<LoginPage />} />
+          <Route path='/register' element={<RegisterPage />} />
+          <Route
+            path='/'
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
